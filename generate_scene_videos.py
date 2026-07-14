@@ -223,23 +223,24 @@ async def main():
     
     print(f"\n📖 找到 {len(all_scenes)} 个场景")
     
-    # 创建占位图片目录
+    # 只处理有参考图片的场景
     placeholder_dir = ".working_dir/placeholder_images"
-    os.makedirs(placeholder_dir, exist_ok=True)
     
     # 为每个场景生成视频
     video_style = "古风写实摄影，电影风格，强对比度，极致细节"
     results = []
     
     for i, scene in enumerate(all_scenes):
+        # 检查是否有参考图片
+        placeholder_path = os.path.join(placeholder_dir, f"scene_{i}.png")
+        if not os.path.exists(placeholder_path):
+            print(f"\n⚠️ 跳过场景 {i+1}: 没有参考图片 {placeholder_path}")
+            continue
+        
         print(f"\n{'='*60}")
         print(f"🎬 场景 {i+1}/{len(all_scenes)}: {scene['_event']}/{scene['_file']}")
         print(f"📍 场景: {scene['environment'].get('slugline', '未知')}")
-        
-        # 创建占位图片
-        placeholder_path = os.path.join(placeholder_dir, f"scene_{i}.png")
-        create_placeholder_image(scene, placeholder_path)
-        print(f"🖼️  占位图片已创建: {placeholder_path}")
+        print(f"🖼️  参考图片: {placeholder_path}")
         
         # 生成提示词
         prompt = scene_to_video_prompt(scene, video_style)
@@ -253,15 +254,15 @@ async def main():
         print(f"\n⏳ 提交视频生成任务 (时长: {duration}秒)...")
         
         try:
-            # 上传图片文件
+            # 读取图片数据
+            with open(placeholder_path, "rb") as f:
+                img_data = f.read()
+            
+            # 提交任务 - 使用ref_imgs字段
             async with aiohttp.ClientSession() as session:
                 headers = {}
                 if gen.api_key:
                     headers["X-API-Key"] = gen.api_key
-                
-                # 读取图片数据到内存
-                with open(placeholder_path, "rb") as f:
-                    img_data = f.read()
                 
                 data = aiohttp.FormData()
                 data.add_field("task_type", "reference_to_video")
@@ -271,9 +272,9 @@ async def main():
                 data.add_field("seed", str(42 + i))
                 data.add_field("offload", "true")
                 
-                # 从内存中添加图片
+                # 使用ref_imgs字段上传图片数组
                 data.add_field(
-                    "input_image",
+                    "ref_imgs",
                     img_data,
                     filename=f"scene_{i}.png",
                     content_type="image/png"
